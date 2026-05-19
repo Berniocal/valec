@@ -1,0 +1,738 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Válec – objem, povrch a síť</title>
+  <style>
+    :root{
+      --bg:#f5f7fb;
+      --panel:#ffffff;
+      --ink:#172033;
+      --muted:#667085;
+      --line:#cfd8e3;
+      --accent:#2563eb;
+      --manual:#fff3b0;
+      --auto:#c9f7d5;
+      --warn:#ffe2e2;
+      --shadow:0 14px 34px rgba(15,23,42,.12);
+      --radius:18px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      color:var(--ink);
+      background:linear-gradient(135deg,#eef4ff,#f8fafc);
+      min-height:100vh;
+    }
+    .app{
+      display:grid;
+      grid-template-columns:minmax(330px,430px) 1fr;
+      gap:18px;
+      padding:18px;
+      min-height:100vh;
+    }
+    .panel,.stage{
+      background:rgba(255,255,255,.92);
+      border:1px solid rgba(203,213,225,.85);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+    }
+    .panel{
+      padding:18px;
+      overflow:auto;
+      max-height:calc(100vh - 36px);
+    }
+    h1{
+      margin:0 0 4px;
+      font-size:24px;
+      line-height:1.15;
+    }
+    h2{
+      margin:22px 0 10px;
+      font-size:18px;
+    }
+    .hint{
+      color:var(--muted);
+      font-size:13px;
+      line-height:1.35;
+      margin:0 0 12px;
+    }
+    .formula-card{
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:12px;
+      margin:10px 0;
+      background:#fff;
+    }
+    .formula{
+      font-size:18px;
+      font-weight:700;
+      letter-spacing:.01em;
+      margin-bottom:10px;
+      color:#0f172a;
+    }
+    .row{
+      display:grid;
+      grid-template-columns:1fr auto;
+      gap:8px;
+      align-items:center;
+      margin:8px 0;
+    }
+    label{
+      font-size:14px;
+      color:#344054;
+    }
+    .inputline{
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+      gap:6px;
+      white-space:nowrap;
+    }
+    input[type="text"], input[type="number"]{
+      width:92px;
+      padding:8px 9px;
+      border:1px solid #b8c4d6;
+      border-radius:10px;
+      background:#fff;
+      font-size:15px;
+      outline:none;
+      text-align:right;
+      transition:.15s;
+    }
+    input[type="text"].unit{
+      width:62px;
+      text-align:left;
+    }
+    input:focus{
+      border-color:var(--accent);
+      box-shadow:0 0 0 3px rgba(37,99,235,.14);
+    }
+    input.manual{background:var(--manual)}
+    input.auto{background:var(--auto)}
+    input.bad{background:var(--warn)}
+    .unit-power{
+      color:#334155;
+      min-width:32px;
+      font-weight:600;
+    }
+    .controls{
+      display:grid;
+      gap:10px;
+      margin:10px 0 0;
+    }
+    
+    button{
+      border:0;
+      border-radius:12px;
+      padding:10px 12px;
+      background:#e8eef9;
+      color:#172033;
+      font-weight:700;
+      cursor:pointer;
+    }
+    button:hover{background:#dbe7fb}
+    .geo-link{display:block;text-align:center;text-decoration:none;border-radius:12px;padding:10px 12px;background:#f1f5f9;color:#1d4ed8;font-weight:700;border:1px solid #d6deeb}
+    .geo-link:hover{background:#e8eef9}
+    .stage{
+      position:relative;
+      display:flex;
+      flex-direction:column;
+      min-height:680px;
+      overflow:hidden;
+    }
+    .topbar{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:14px 18px;
+      border-bottom:1px solid var(--line);
+      gap:12px;
+      flex-wrap:wrap;
+    }
+    .badge{
+      padding:6px 10px;
+      background:#eef4ff;
+      color:#1d4ed8;
+      border-radius:999px;
+      font-size:13px;
+      font-weight:700;
+    }
+    .canvas-wrap{
+      position:relative;
+      flex:1;
+      min-height:580px;
+    }
+    svg{
+      width:100%;
+      height:100%;
+      display:block;
+      background:
+        radial-gradient(circle at 50% 28%, rgba(37,99,235,.08), transparent 35%),
+        linear-gradient(#fff,#f8fafc);
+    }
+    .dim-line{stroke:#0f172a;stroke-width:2;fill:none}
+    .dim-help{stroke:#64748b;stroke-width:1.3;stroke-dasharray:5 5;fill:none}
+    .dim-arrow{fill:#0f172a}
+    .shape-fill{fill:url(#sideGrad);stroke:#35527a;stroke-width:2}
+    .ellipse-top{fill:url(#topGrad);stroke:#24466e;stroke-width:2}
+    .ellipse-bottom{fill:#9fc5f8;stroke:#24466e;stroke-width:2}
+    .net-fill{fill:#dbeafe;stroke:#24466e;stroke-width:2}
+    .net-circle{fill:#bfdbfe;stroke:#24466e;stroke-width:2}
+    .animated-lid{transform-box:fill-box;transform-origin:center}
+    .unroll-rib{stroke:#7aa6dc;stroke-width:1;opacity:.55}
+    .hinge{stroke:#1e3a5f;stroke-width:4;stroke-linecap:round}
+    .cut-line{stroke:#1e3a5f;stroke-width:2.5;stroke-dasharray:7 5;opacity:.75}
+    .formula mjx-container{margin:0!important}
+    .formula{min-height:34px;display:flex;align-items:center}
+    .label-box foreignObject{overflow:visible}
+    .svg-input{
+      width:118px;
+      padding:7px 8px;
+      border:1px solid #9aa8bd;
+      border-radius:10px;
+      background:white;
+      font-size:14px;
+      text-align:center;
+      box-shadow:0 4px 12px rgba(15,23,42,.13);
+    }
+    .svg-input.manual{background:var(--manual)}
+    .svg-input.auto{background:var(--auto)}
+    .svg-unit{
+      display:inline-block;
+      margin-left:4px;
+      padding:6px 8px;
+      border-radius:9px;
+      background:rgba(255,255,255,.88);
+      border:1px solid #cbd5e1;
+      font-weight:700;
+      font-size:13px;
+      box-shadow:0 4px 12px rgba(15,23,42,.1);
+    }
+    .dim-text{
+      font-size:15px;
+      font-weight:800;
+      fill:#0f172a;
+      paint-order:stroke;
+      stroke:#fff;
+      stroke-width:4;
+      stroke-linejoin:round;
+    }
+    .note{
+      position:absolute;
+      left:18px;
+      bottom:14px;
+      padding:9px 12px;
+      border-radius:12px;
+      background:rgba(255,255,255,.85);
+      border:1px solid #d6deeb;
+      color:#475569;
+      font-size:13px;
+      backdrop-filter:blur(6px);
+    }
+    @media(max-width:900px){
+      .app{grid-template-columns:1fr;padding:10px}
+      .panel{max-height:none}
+      .stage{min-height:620px}
+    }
+  </style>
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['\\(', '\\)'], ['$', '$']] },
+      svg: { fontCache: 'global' },
+      startup: { typeset: false }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+</head>
+<body>
+<div class="app">
+  <aside class="panel">
+    <h1>Válec</h1>
+    <p class="hint">Žlutě jsou tvoje ruční hodnoty, zeleně dopočítané. Hodnoty piš jako čísla, desetinná čárka funguje. Jednotka délky je společná pro celý příklad.</p>
+
+    <div class="formula-card">
+      <div class="formula">Zadané rozměry</div>
+      <div class="row">
+        <label for="r">poloměr podstavy r</label>
+        <div class="inputline"><input id="r" inputmode="decimal" type="text" autocomplete="off"><input id="unit" class="unit" type="text" value="cm"></div>
+      </div>
+      <div class="row">
+        <label for="h">výška válce v</label>
+        <div class="inputline"><input id="h" inputmode="decimal" type="text" autocomplete="off"><span id="unitLen" class="unit-power">cm</span></div>
+      </div>
+      <div class="row">
+        <label for="o">obvod podstavy o</label>
+        <div class="inputline"><input id="o" inputmode="decimal" type="text" autocomplete="off"><span id="unitLenO" class="unit-power">cm</span></div>
+      </div>
+    </div>
+
+    <h2>Vzorce a výpočty</h2>
+
+    <div class="formula-card">
+      <div class="formula math">\(V = \pi \cdot r^2 \cdot v\)</div>
+      <div class="row">
+        <label for="V">objem válce V</label>
+        <div class="inputline"><input id="V" inputmode="decimal" type="text" autocomplete="off"><span id="unitVol" class="unit-power">cm³</span></div>
+      </div>
+    </div>
+
+    <div class="formula-card">
+      <div class="formula math">\(S_p = \pi \cdot r^2\)</div>
+      <div class="row">
+        <label for="Sp">povrch jedné podstavy Sₚ</label>
+        <div class="inputline"><input id="Sp" inputmode="decimal" type="text" autocomplete="off"><span id="unitArea1" class="unit-power">cm²</span></div>
+      </div>
+    </div>
+
+    <div class="formula-card">
+      <div class="formula math">\(2S_p = 2 \cdot \pi \cdot r^2\)</div>
+      <div class="row">
+        <label for="S2p">povrch obou podstav 2Sₚ</label>
+        <div class="inputline"><input id="S2p" inputmode="decimal" type="text" autocomplete="off"><span id="unitArea2" class="unit-power">cm²</span></div>
+      </div>
+    </div>
+
+    <div class="formula-card">
+      <div class="formula math">\(S_{pl} = o \cdot v = 2\pi r \cdot v\)</div>
+      <div class="row">
+        <label for="Spl">povrch pláště Sₚₗ</label>
+        <div class="inputline"><input id="Spl" inputmode="decimal" type="text" autocomplete="off"><span id="unitArea3" class="unit-power">cm²</span></div>
+      </div>
+    </div>
+
+    <div class="formula-card">
+      <div class="formula math">\(S = S_{pl} + 2S_p = 2\pi r(r+v)\)</div>
+      <div class="row">
+        <label for="S">celkový povrch S</label>
+        <div class="inputline"><input id="S" inputmode="decimal" type="text" autocomplete="off"><span id="unitArea4" class="unit-power">cm²</span></div>
+      </div>
+    </div>
+
+    <h2>Zobrazení</h2>
+    <div class="controls">
+      <button id="toggleViewBtn">Přepnout na síť válce</button>
+      <button id="clearBtn">Vymazat ručně zadané hodnoty</button>
+    </div>
+  </aside>
+
+  <main class="stage">
+    <div class="topbar">
+      <strong id="modeTitle">3D model válce</strong>
+      <span class="badge" id="status">Zadej alespoň dva použitelné údaje.</span>
+    </div>
+    <div class="canvas-wrap">
+      <svg id="svg" viewBox="0 0 900 650" aria-label="Válec se zakótovanými rozměry">
+        <defs>
+          <linearGradient id="sideGrad" x1="0" x2="1">
+            <stop offset="0" stop-color="#bfdbfe"/>
+            <stop offset=".45" stop-color="#eff6ff"/>
+            <stop offset="1" stop-color="#93c5fd"/>
+          </linearGradient>
+          <radialGradient id="topGrad" cx="50%" cy="35%" r="70%">
+            <stop offset="0" stop-color="#eff6ff"/>
+            <stop offset="1" stop-color="#93c5fd"/>
+          </radialGradient>
+          <marker id="arrow" markerWidth="9" markerHeight="9" refX="4.5" refY="4.5" orient="auto">
+            <path class="dim-arrow" d="M0,0 L9,4.5 L0,9 z"></path>
+          </marker>
+          <marker id="arrowBack" markerWidth="9" markerHeight="9" refX="4.5" refY="4.5" orient="auto-start-reverse">
+            <path class="dim-arrow" d="M0,0 L9,4.5 L0,9 z"></path>
+          </marker>
+        </defs>
+        <g id="drawing"></g>
+      </svg>
+      <div class="note">Tip: zadej rozměry přímo do obrázku nebo do panelu vlevo.</div>
+    </div>
+  </main>
+</div>
+
+<script>
+(() => {
+  const ids = ["r","h","o","V","Sp","S2p","Spl","S"];
+  const els = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
+  const unitEl = document.getElementById("unit");
+  let netView = false;
+  const drawing = document.getElementById("drawing");
+  const statusEl = document.getElementById("status");
+  const modeTitle = document.getElementById("modeTitle");
+  const clearBtn = document.getElementById("clearBtn");
+
+  const state = {};
+  ids.forEach(id => state[id] = { value:null, source:"empty" });
+
+  const aliases = {
+    "V":"V",
+    "Sp":"Sp",
+    "S2p":"S2p",
+    "Spl":"Spl",
+    "S":"S",
+    "r":"r",
+    "h":"h"
+  };
+
+  function parseNum(s){
+    if(s == null) return null;
+    const cleaned = String(s).trim().replace(/\s/g,"").replace(",",".");
+    if(cleaned === "") return null;
+    const n = Number(cleaned);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+
+  function fmt(n){
+    if(!Number.isFinite(n)) return "";
+    const rounded = Math.round(n * 100) / 100;
+    return String(rounded).replace(".", ",");
+  }
+
+  function unit(){
+    return unitEl.value.trim() || "j";
+  }
+
+  function updateUnits(){
+    const u = unit();
+    document.getElementById("unitLen").textContent = u;
+    document.getElementById("unitLenO").textContent = u;
+    document.getElementById("unitVol").textContent = u + "³";
+    ["unitArea1","unitArea2","unitArea3","unitArea4"].forEach(id => document.getElementById(id).textContent = u + "²");
+  }
+
+  function setClass(id){
+    const el = els[id];
+    el.classList.remove("manual","auto","bad");
+    if(state[id].source === "manual") el.classList.add("manual");
+    if(state[id].source === "auto") el.classList.add("auto");
+    if(state[id].source === "bad") el.classList.add("bad");
+  }
+
+  function readManualFromDom(){
+    ids.forEach(id => {
+      const n = parseNum(els[id].value);
+      if(els[id].dataset.userTouched === "1" && n !== null){
+        state[id] = { value:n, source:"manual" };
+      } else if(els[id].dataset.userTouched === "1" && els[id].value.trim() !== ""){
+        state[id] = { value:null, source:"bad" };
+      } else if(els[id].dataset.userTouched === "1"){
+        state[id] = { value:null, source:"empty" };
+      }
+    });
+  }
+
+  function safeSet(id, value, source){
+    if(!Number.isFinite(value) || value <= 0) return false;
+    if(state[id].source === "manual") return false;
+    state[id] = { value, source };
+    return true;
+  }
+
+  function solve(){
+    readManualFromDom();
+
+    // Vyčisti staré automatické výsledky, ruční hodnoty nech.
+    ids.forEach(id => {
+      if(state[id].source === "auto") state[id] = { value:null, source:"empty" };
+    });
+
+    let changed = true;
+    let loops = 0;
+    while(changed && loops++ < 12){
+      changed = false;
+      const r = state.r.value;
+      const h = state.h.value;
+      const o = state.o.value;
+      const V = state.V.value;
+      const Sp = state.Sp.value;
+      const S2p = state.S2p.value;
+      const Spl = state.Spl.value;
+      const S = state.S.value;
+
+      if(r && !o) changed = safeSet("o", 2 * Math.PI * r, "auto") || changed;
+      if(o && !r) changed = safeSet("r", o / (2 * Math.PI), "auto") || changed;
+
+      if(r && !Sp) changed = safeSet("Sp", Math.PI * r*r, "auto") || changed;
+      if(Sp && !r) changed = safeSet("r", Math.sqrt(Sp / Math.PI), "auto") || changed;
+
+      if(Sp && !S2p) changed = safeSet("S2p", 2 * Sp, "auto") || changed;
+      if(S2p && !Sp) changed = safeSet("Sp", S2p / 2, "auto") || changed;
+
+      if(r && h && !V) changed = safeSet("V", Math.PI * r*r * h, "auto") || changed;
+      if(V && h && !r) changed = safeSet("r", Math.sqrt(V / (Math.PI * h)), "auto") || changed;
+      if(V && r && !h) changed = safeSet("h", V / (Math.PI * r*r), "auto") || changed;
+
+      if(r && h && !Spl) changed = safeSet("Spl", 2 * Math.PI * r * h, "auto") || changed;
+      if(Spl && h && !r) changed = safeSet("r", Spl / (2 * Math.PI * h), "auto") || changed;
+      if(Spl && r && !h) changed = safeSet("h", Spl / (2 * Math.PI * r), "auto") || changed;
+
+      if(Spl && S2p && !S) changed = safeSet("S", Spl + S2p, "auto") || changed;
+      if(S && S2p && !Spl && S > S2p) changed = safeSet("Spl", S - S2p, "auto") || changed;
+      if(S && Spl && !S2p && S > Spl) changed = safeSet("S2p", S - Spl, "auto") || changed;
+
+      const r2 = state.r.value;
+      const h2 = state.h.value;
+      const Sx = state.S.value;
+      if(Sx && r2 && !h2){
+        const hcalc = Sx / (2 * Math.PI * r2) - r2;
+        if(hcalc > 0) changed = safeSet("h", hcalc, "auto") || changed;
+      }
+      if(Sx && h2 && !r2){
+        // S = 2πr(r+v) -> r² + v·r - S/(2π) = 0
+        const disc = h2*h2 + 2*Sx/Math.PI;
+        const rcalc = (-h2 + Math.sqrt(disc)) / 2;
+        if(rcalc > 0) changed = safeSet("r", rcalc, "auto") || changed;
+      }
+    }
+
+    writeDom();
+    draw();
+  }
+
+  function writeDom(){
+    ids.forEach(id => {
+      if(state[id].source === "auto"){
+        els[id].value = fmt(state[id].value);
+        els[id].dataset.userTouched = "";
+      } else if(state[id].source === "empty" && els[id].dataset.userTouched !== "1"){
+        els[id].value = "";
+      }
+      setClass(id);
+    });
+    updateUnits();
+
+    const autoCount = ids.filter(id => state[id].source === "auto").length;
+    const manualCount = ids.filter(id => state[id].source === "manual").length;
+    if(autoCount > 0) statusEl.textContent = `Dopočítáno ${autoCount} hodnot.`;
+    else if(manualCount > 0) statusEl.textContent = "Zatím není dost údajů k dopočítání další hodnoty.";
+    else statusEl.textContent = "Zadej alespoň dva použitelné údaje.";
+  }
+
+  function makeSvgInput(id, x, y, w=136, unitText=""){
+    const val = state[id].value ? fmt(state[id].value) : "";
+    const cls = state[id].source === "manual" ? "manual" : state[id].source === "auto" ? "auto" : "";
+    return `
+      <foreignObject x="${x}" y="${y}" width="${w+86}" height="54">
+        <div xmlns="http://www.w3.org/1999/xhtml" style="display:flex;align-items:center;gap:4px;">
+          <input class="svg-input ${cls}" data-svg-input="${id}" inputmode="decimal" value="${val}">
+          <span class="svg-unit">${unitText}</span>
+        </div>
+      </foreignObject>`;
+  }
+
+  let activeSvgInput = null;
+
+  function bindSvgInputs(){
+    drawing.querySelectorAll("[data-svg-input]").forEach(inp => {
+      inp.addEventListener("focus", e => {
+        activeSvgInput = e.target.dataset.svgInput;
+      });
+      inp.addEventListener("blur", () => {
+        activeSvgInput = null;
+        solve();
+      });
+      inp.addEventListener("input", e => {
+        const id = e.target.dataset.svgInput;
+        els[id].value = e.target.value;
+        els[id].dataset.userTouched = "1";
+
+        const n = parseNum(e.target.value);
+        if(n !== null){
+          state[id] = { value:n, source:"manual" };
+        } else if(e.target.value.trim() === ""){
+          state[id] = { value:null, source:"empty" };
+        } else {
+          state[id] = { value:null, source:"bad" };
+        }
+
+        solve();
+      });
+    });
+  }
+
+  function recalcWithoutSvgRedraw(){
+    // Přepočítá panel, ale neničí právě rozepsané SVG políčko.
+    ids.forEach(id => {
+      if(state[id].source === "auto") state[id] = { value:null, source:"empty" };
+    });
+
+    let changed = true, loops = 0;
+    while(changed && loops++ < 12){
+      changed = false;
+      const r = state.r.value;
+      const h = state.h.value;
+      const o = state.o.value;
+      const V = state.V.value;
+      const Sp = state.Sp.value;
+      const S2p = state.S2p.value;
+      const Spl = state.Spl.value;
+      const S = state.S.value;
+
+      if(r && !o) changed = safeSet("o", 2 * Math.PI * r, "auto") || changed;
+      if(o && !r) changed = safeSet("r", o / (2 * Math.PI), "auto") || changed;
+
+      if(r && !Sp) changed = safeSet("Sp", Math.PI * r*r, "auto") || changed;
+      if(Sp && !r) changed = safeSet("r", Math.sqrt(Sp / Math.PI), "auto") || changed;
+
+      if(Sp && !S2p) changed = safeSet("S2p", 2 * Sp, "auto") || changed;
+      if(S2p && !Sp) changed = safeSet("Sp", S2p / 2, "auto") || changed;
+
+      if(r && h && !V) changed = safeSet("V", Math.PI * r*r * h, "auto") || changed;
+      if(V && h && !r) changed = safeSet("r", Math.sqrt(V / (Math.PI * h)), "auto") || changed;
+      if(V && r && !h) changed = safeSet("h", V / (Math.PI * r*r), "auto") || changed;
+
+      if(r && h && !Spl) changed = safeSet("Spl", 2 * Math.PI * r * h, "auto") || changed;
+      if(Spl && h && !r) changed = safeSet("r", Spl / (2 * Math.PI * h), "auto") || changed;
+      if(Spl && r && !h) changed = safeSet("h", Spl / (2 * Math.PI * r), "auto") || changed;
+
+      if(Spl && S2p && !S) changed = safeSet("S", Spl + S2p, "auto") || changed;
+      if(S && S2p && !Spl && S > S2p) changed = safeSet("Spl", S - S2p, "auto") || changed;
+      if(S && Spl && !S2p && S > Spl) changed = safeSet("S2p", S - Spl, "auto") || changed;
+
+      const r2 = state.r.value;
+      const h2 = state.h.value;
+      const Sx = state.S.value;
+      if(Sx && r2 && !h2){
+        const hcalc = Sx / (2 * Math.PI * r2) - r2;
+        if(hcalc > 0) changed = safeSet("h", hcalc, "auto") || changed;
+      }
+      if(Sx && h2 && !r2){
+        // S = 2πr(r+v) -> r² + v·r - S/(2π) = 0
+        const disc = h2*h2 + 2*Sx/Math.PI;
+        const rcalc = (-h2 + Math.sqrt(disc)) / 2;
+        if(rcalc > 0) changed = safeSet("r", rcalc, "auto") || changed;
+      }
+    }
+    writeDom();
+  }
+
+  function draw(){
+    const keepFocusId = activeSvgInput;
+    const keepFocusValue = keepFocusId ? (document.querySelector(`[data-svg-input="${keepFocusId}"]`)?.value ?? null) : null;
+
+    modeTitle.textContent = netView ? "Síť válce" : "3D model válce";
+
+    const rVal = state.r.value || 2;
+    const hVal = state.h.value || 7;
+
+    // Společné měřítko: poloměr i výška jsou ve stejném poměru.
+    // Šířka válce = 2r, výška válce = v. Např. r = 100, v = 200 => výška je stejně velká jako průměr,
+    // tedy 2× větší než poloměr.
+    const maxVisualW = 360;
+    const maxVisualH = 360;
+    const scale = Math.min(maxVisualW / (2 * rVal), maxVisualH / hVal);
+    const cylW = Math.max(35, 2 * rVal * scale);
+    const cylH = Math.max(35, hVal * scale);
+    const cx = 465;
+    const topY = 165 + (360 - cylH) / 2;
+    const ey = Math.max(12, Math.min(46, cylW * 0.20));
+    const bottomY = topY + cylH;
+    const left = cx - cylW/2, right = cx + cylW/2;
+
+    if(!netView){
+      drawing.innerHTML = `
+        <path class="shape-fill" d="M ${left} ${topY}
+                                   C ${left+30} ${topY+28}, ${right-30} ${topY+28}, ${right} ${topY}
+                                   L ${right} ${bottomY}
+                                   C ${right-30} ${bottomY+28}, ${left+30} ${bottomY+28}, ${left} ${bottomY}
+                                   Z"/>
+        <ellipse class="ellipse-bottom" cx="${cx}" cy="${bottomY}" rx="${cylW/2}" ry="${ey}"/>
+        <ellipse class="ellipse-top" cx="${cx}" cy="${topY}" rx="${cylW/2}" ry="${ey}"/>
+
+        <line class="dim-help" x1="${right+38}" y1="${topY}" x2="${right+38}" y2="${bottomY}"/>
+        <line class="dim-line" x1="${right+62}" y1="${topY}" x2="${right+62}" y2="${bottomY}" marker-start="url(#arrowBack)" marker-end="url(#arrowBack)"/>
+        <text class="dim-text" x="${right+78}" y="${(topY+bottomY)/2-18}">výška v</text>
+        ${makeSvgInput("h", right+78, (topY+bottomY)/2-6, 128, unit())}
+
+        <line class="dim-line" x1="${cx}" y1="${topY}" x2="${right}" y2="${topY}" marker-end="url(#arrowBack)"/>
+        <text class="dim-text" x="${cx+28}" y="${topY-18}" fill="#8e44ad">poloměr r</text>
+        <text class="dim-text" x="${cx-8}" y="${topY+7}">×</text>
+        ${makeSvgInput("r", cx+24, topY+18, 128, unit())}
+      `;
+    } else {
+      // Síť: zakótovaný jen rozvinutý obvod a výška, podstavy jsou nahoře a dole.
+      const obvodVal = 2 * Math.PI * rVal;
+      const netScale = Math.min(520 / obvodVal, 270 / hVal);
+      const netW = Math.max(80, obvodVal * netScale);
+      const netH = Math.max(35, hVal * netScale);
+      const netX = 190 + (520 - netW) / 2;
+      const netY = 245 + (270 - netH) / 2;
+      const netR = Math.max(10, rVal * netScale);
+      const attachX = netX + netW * .38;
+      const topCy = netY - netR;
+      const botCy = netY + netH + netR;
+      const topDimY = netY - netR * 2 - 42;
+
+      drawing.innerHTML = `
+        <rect class="net-fill" x="${netX}" y="${netY}" width="${netW}" height="${netH}" rx="0"/>
+        <line x1="${netX+netW}" y1="${netY}" x2="${netX+netW}" y2="${netY+netH}" stroke="#1d9bd7" stroke-width="4"/>
+
+        <circle class="net-circle" cx="${attachX}" cy="${topCy}" r="${netR}"/>
+        <circle class="net-circle" cx="${attachX}" cy="${botCy}" r="${netR}"/>
+        <line class="hinge" x1="${attachX-netR}" y1="${netY}" x2="${attachX+netR}" y2="${netY}"/>
+        <line class="hinge" x1="${attachX-netR}" y1="${netY+netH}" x2="${attachX+netR}" y2="${netY+netH}"/>
+
+        <line class="dim-line" x1="${netX}" y1="${topDimY}" x2="${netX+netW}" y2="${topDimY}" marker-start="url(#arrowBack)" marker-end="url(#arrowBack)"/>
+        <text class="dim-text" x="${netX+netW/2-118}" y="${topDimY-20}">rozvinutý obvod o = 2πr</text>
+        ${makeSvgInput("o", netX+netW/2-75, topDimY-82, 150, unit())}
+
+        <line class="dim-line" x1="${netX-34}" y1="${netY}" x2="${netX-34}" y2="${netY+netH}" marker-start="url(#arrowBack)" marker-end="url(#arrowBack)"/>
+        <text class="dim-text" x="${netX-128}" y="${netY+netH/2-20}">výška v</text>
+        ${makeSvgInput("h", netX-150, netY+netH/2-8, 128, unit())}
+      `;
+    }
+
+    bindSvgInputs();
+
+    if(keepFocusId){
+      const fresh = document.querySelector(`[data-svg-input="${keepFocusId}"]`);
+      if(fresh){
+        if(keepFocusValue !== null) fresh.value = keepFocusValue;
+        fresh.focus();
+        const len = fresh.value.length;
+        try { fresh.setSelectionRange(len, len); } catch(e) {}
+        activeSvgInput = keepFocusId;
+      }
+    }
+  }
+
+  ids.forEach(id => {
+    els[id].addEventListener("input", () => {
+      els[id].dataset.userTouched = "1";
+      solve();
+    });
+    els[id].addEventListener("focus", () => els[id].select());
+  });
+
+  unitEl.addEventListener("input", () => {
+    updateUnits();
+    draw();
+  });
+const toggleViewBtn = document.getElementById("toggleViewBtn");
+  toggleViewBtn.addEventListener("click", () => {
+    netView = !netView;
+    toggleViewBtn.textContent = netView
+      ? "Přepnout na 3D válec"
+      : "Přepnout na síť válce";
+    draw();
+  });
+
+  clearBtn.addEventListener("click", () => {
+    ids.forEach(id => {
+      els[id].value = "";
+      els[id].dataset.userTouched = "";
+      state[id] = { value:null, source:"empty" };
+    });
+    solve();
+  });
+
+  updateUnits();
+  solve();
+  window.addEventListener("load", () => {
+    if(window.MathJax && MathJax.typesetPromise){
+      MathJax.typesetPromise(document.querySelectorAll(".math"));
+    }
+  });
+})();
+</script>
+</body>
+</html>
